@@ -18,6 +18,7 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 import asyncio
+import random
 import hashlib
 import json
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -561,7 +562,7 @@ class BaiduTieBaClient(AbstractApiClient):
                     await self.playwright_page.goto(sub_comment_url, wait_until="domcontentloaded")
 
                     # Wait for page loading, using delay setting from config file
-                    await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                    await asyncio.sleep(random.uniform(config.CRAWLER_MIN_SLEEP_SEC, config.CRAWLER_MAX_SLEEP_SEC))
 
                     # Get page HTML content
                     page_content = await self.playwright_page.content()
@@ -732,7 +733,7 @@ class BaiduTieBaClient(AbstractApiClient):
             await self.playwright_page.goto(creator_url, wait_until="domcontentloaded")
 
             # Wait for page loading, using delay setting from config file
-            await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+            await asyncio.sleep(random.uniform(config.CRAWLER_MIN_SLEEP_SEC, config.CRAWLER_MAX_SLEEP_SEC))
 
             # Get page content (this API returns JSON)
             page_content = await self.playwright_page.content()

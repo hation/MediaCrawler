@@ -49,6 +49,13 @@ def get_current_time_hour() -> str:
     """
     return time.strftime('%Y-%m-%d-%H', time.localtime())
 
+def get_current_time_minute() -> str:
+    """
+    Get current time with minute: '2023-12-02-13-01'
+    :return:
+    """
+    return time.strftime('%Y-%m-%d-%H-%M', time.localtime())
+
 def get_current_date() -> str:
     """
     Get current date: '2023-12-02'

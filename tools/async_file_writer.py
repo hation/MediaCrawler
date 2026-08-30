@@ -21,26 +21,42 @@ import csv
 import json
 import os
 import pathlib
+import re
 from typing import Dict, List
 import aiofiles
 import config
 from tools.utils import utils
 from tools.words import AsyncWordCloudGenerator
+from var import source_keyword_var
 
 class AsyncFileWriter:
     def __init__(self, platform: str, crawler_type: str):
         self.lock = asyncio.Lock()
         self.platform = platform
         self.crawler_type = crawler_type
+        self.start_time = utils.get_current_time_minute()
         self.wordcloud_generator = AsyncWordCloudGenerator() if config.ENABLE_GET_WORDCLOUD else None
 
-    def _get_file_path(self, file_type: str, item_type: str) -> str:
+    @staticmethod
+    def _sanitize(name: str) -> str:
+        return re.sub(r'[\\/:*?"<>|\s]+', '_', name).strip('_')
+
+    def _get_dir_path(self, file_type: str) -> str:
         if config.SAVE_DATA_PATH:
             base_path = f"{config.SAVE_DATA_PATH}/{self.platform}/{file_type}"
         else:
             base_path = f"data/{self.platform}/{file_type}"
         pathlib.Path(base_path).mkdir(parents=True, exist_ok=True)
-        file_name = f"{self.crawler_type}_{item_type}_{utils.get_current_date()}.{file_type}"
+        return base_path
+
+    def _get_file_path(self, file_type: str, item_type: str) -> str:
+        base_path = self._get_dir_path(file_type)
+        parts = [self.crawler_type, item_type, self.start_time]
+        keyword = source_keyword_var.get().strip()
+        if keyword:
+            parts.append(self._sanitize(keyword))
+        parts.append(self.platform)
+        file_name = "_".join(parts) + f".{file_type}"
         return f"{base_path}/{file_name}"
 
     async def write_to_csv(self, item: Dict, item_type: str):
@@ -137,7 +153,12 @@ class AsyncFileWriter:
             else:
                 words_base_path = f"data/{self.platform}/words"
             pathlib.Path(words_base_path).mkdir(parents=True, exist_ok=True)
-            words_file_prefix = f"{words_base_path}/{self.crawler_type}_comments_{utils.get_current_date()}"
+            words_parts = [self.crawler_type, 'comments', self.start_time]
+            words_keyword = source_keyword_var.get().strip()
+            if words_keyword:
+                words_parts.append(self._sanitize(words_keyword))
+            words_parts.append(self.platform)
+            words_file_prefix = f"{words_base_path}/{'_'.join(words_parts)}"
 
             utils.logger.info(f"[AsyncFileWriter.generate_wordcloud_from_comments] Generating wordcloud from {len(filtered_data)} comments")
             await self.wordcloud_generator.generate_word_frequency_and_cloud(filtered_data, words_file_prefix)

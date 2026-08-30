@@ -187,7 +187,7 @@ class KuaishouCrawler(AbstractCrawler):
 
                 # Sleep after page navigation
                 # 固定延时基础上加 1-3 秒随机抖动，降低服务端限流概率
-                sleep_sec = config.CRAWLER_MAX_SLEEP_SEC + random.uniform(1, 3)
+                sleep_sec = random.uniform(config.CRAWLER_MIN_SLEEP_SEC, config.CRAWLER_MAX_SLEEP_SEC)
                 await asyncio.sleep(sleep_sec)
                 utils.logger.info(f"[KuaishouCrawler.search] Sleeping for {sleep_sec:.1f} seconds after page {page-1}")
 
@@ -227,7 +227,7 @@ class KuaishouCrawler(AbstractCrawler):
 
                 # Sleep after fetching video details
                 # 固定延时基础上加 1-3 秒随机抖动，降低服务端限流概率
-                sleep_sec = config.CRAWLER_MAX_SLEEP_SEC + random.uniform(1, 3)
+                sleep_sec = random.uniform(config.CRAWLER_MIN_SLEEP_SEC, config.CRAWLER_MAX_SLEEP_SEC)
                 await asyncio.sleep(sleep_sec)
                 utils.logger.info(f"[KuaishouCrawler.get_video_info_task] Sleeping for {sleep_sec:.1f} seconds after fetching video details {video_id}")
 
@@ -294,13 +294,13 @@ class KuaishouCrawler(AbstractCrawler):
 
                 # Sleep before fetching comments
                 # 固定延时基础上加 1-3 秒随机抖动，降低服务端限流概率
-                sleep_sec = config.CRAWLER_MAX_SLEEP_SEC + random.uniform(1, 3)
+                sleep_sec = random.uniform(config.CRAWLER_MIN_SLEEP_SEC, config.CRAWLER_MAX_SLEEP_SEC)
                 await asyncio.sleep(sleep_sec)
                 utils.logger.info(f"[KuaishouCrawler.get_comments] Sleeping for {sleep_sec:.1f} seconds before fetching comments for video {video_id}")
 
                 await self.ks_client.get_video_all_comments(
                     photo_id=video_id,
-                    crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
+                    crawl_interval=random.uniform(config.CRAWLER_MIN_SLEEP_SEC, config.CRAWLER_MAX_SLEEP_SEC),
                     callback=kuaishou_store.batch_update_ks_video_comments,
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
@@ -438,7 +438,7 @@ class KuaishouCrawler(AbstractCrawler):
             # Get all video information of the creator
             all_video_list = await self.ks_client.get_all_videos_by_creator(
                 user_id=user_id,
-                crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
+                crawl_interval=random.uniform(config.CRAWLER_MIN_SLEEP_SEC, config.CRAWLER_MAX_SLEEP_SEC),
                 callback=self.fetch_creator_video_detail,
             )
             utils.logger.info(

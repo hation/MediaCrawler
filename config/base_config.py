@@ -80,6 +80,9 @@ BROWSER_LAUNCH_TIMEOUT = 60
 # 用户需要在 Chrome 中开启远程调试：chrome://inspect/#remote-debugging
 # 或者使用命令行参数启动 Chrome：--remote-debugging-port=9222
 # 这种方式反检测效果最好，因为直接使用用户真实浏览器的所有 Cookie、扩展和浏览历史
+# 2026-08-29 改为 True：直接连接用户当前打开的 Chrome（需 --remote-debugging-port=9222）
+# 原因：macOS 多 Chrome 实例会触发 crashpad bootstrap 冲突导致浏览器 SIGABRT，
+# 复用现有 Chrome 实例最稳，且登录态/历史/扩展全真，反检测效果最好
 CDP_CONNECT_EXISTING = True
 
 # 程序结束时是否自动关闭浏览器
@@ -99,7 +102,7 @@ USER_DATA_DIR = "%s_user_data_dir"  # %s will be replaced by platform name
 START_PAGE = 1
 
 # Control the number of crawled videos/posts
-CRAWLER_MAX_NOTES_COUNT = 15
+CRAWLER_MAX_NOTES_COUNT = 200
 
 # Controlling the number of concurrent crawlers
 MAX_CONCURRENCY_NUM = 1
@@ -133,8 +136,10 @@ STOP_WORDS_FILE = "./docs/hit_stopwords.txt"
 # Chinese font file path
 FONT_PATH = "./docs/STZHONGS.TTF"
 
-# Crawl interval
-CRAWLER_MAX_SLEEP_SEC = 2
+# Crawl interval: 每次请求间隔在 [CRAWLER_MIN_SLEEP_SEC, CRAWLER_MAX_SLEEP_SEC] 区间内随机取值
+# 随机间隔比固定间隔更接近真人行为，降低被风控识别的概率
+CRAWLER_MIN_SLEEP_SEC = 3
+CRAWLER_MAX_SLEEP_SEC = 6
 
 # 是否禁用 SSL 证书验证。仅在使用企业代理、Burp Suite、mitmproxy 等会注入自签名证书的中间人代理时设为 True。
 # 警告：禁用 SSL 验证将使所有流量暴露于中间人攻击风险，请勿在生产环境中开启。
