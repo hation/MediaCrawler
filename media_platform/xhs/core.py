@@ -39,7 +39,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import xhs as xhs_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
-from var import crawler_type_var, source_keyword_var
+from var import crawler_type_var, source_keyword_var, creator_id_var
 
 from .client import XiaoHongShuClient
 from .exception import (
@@ -195,10 +195,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
         utils.logger.info("[XiaoHongShuCrawler.get_creators_and_notes] Begin get Xiaohongshu creators")
         for creator_url in config.XHS_CREATOR_ID_LIST:
             try:
-                # Parse creator URL to get user_id and security tokens
-                creator_info: CreatorUrlInfo = parse_creator_info_from_url(creator_url)
-                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes] Parse creator URL info: {creator_info}")
+                # 解析创作者身份（支持 hex user_id / 纯数字 / 完整链接），
+                # 缺少 xsec_token 时自动打开浏览器主页/搜索页提取
+                creator_info: CreatorUrlInfo = await self._resolve_creator_with_token(creator_url)
+                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes] Resolved creator info: {creator_info}")
                 user_id = creator_info.user_id
+                # 记录当前创作者的 user_id，用于文件命名区分不同创作者
+                creator_id_var.set(user_id)
 
                 # get creator detail info from web html content
                 createor_info: Dict = await self.xhs_client.get_creator_info(
@@ -236,6 +239,106 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 note_ids.append(note_item.get("note_id"))
                 xsec_tokens.append(note_item.get("xsec_token"))
             await self.batch_get_note_comments(note_ids, xsec_tokens)
+
+    async def _resolve_creator_with_token(self, creator_input: str) -> CreatorUrlInfo:
+        """将用户提供的创作者身份解析为带 xsec_token 的 CreatorUrlInfo。
+
+        支持：
+        1. 完整主页链接（含 xsec_token）：直接使用
+        2. 24 位 hex user_id / 无 token 链接：打开主页页面，从页面内笔记链接提取 token
+        3. 纯数字 user_id：站内搜索匹配用户主页，提取 user_id 与 token
+
+        若浏览器中无法获取 token，退回无 token 信息（由后续 API 调用兜底报错）。
+        """
+        import re
+
+        try:
+            creator_info = parse_creator_info_from_url(creator_input)
+        except ValueError:
+            creator_info = None
+
+        # 纯数字 user_id：通过站内搜索定位主页
+        if creator_info is None:
+            if str(creator_input).strip().isdigit():
+                return await self._resolve_creator_by_search(str(creator_input).strip())
+            raise ValueError(f"Unable to parse creator info from URL: {creator_input}")
+
+        # 已带 token 的完整链接：直接使用
+        if creator_info.xsec_token:
+            return creator_info
+
+        # hex user_id 或 无 token 链接：打开主页提取 token
+        token, source = await self._extract_token_from_profile_page(creator_info.user_id)
+        utils.logger.info(
+            f"[XiaoHongShuCrawler._resolve_creator_with_token] Extracted token for user {creator_info.user_id}: "
+            f"token={'yes' if token else 'no'}, source={source or 'pc_feed'}"
+        )
+        return CreatorUrlInfo(
+            user_id=creator_info.user_id,
+            xsec_token=token,
+            xsec_source=source or "pc_feed",
+        )
+
+    async def _extract_token_from_profile_page(self, user_id: str) -> tuple:
+        """打开创作者主页，从页面内的笔记链接中提取 xsec_token / xsec_source。
+
+        Returns:
+            (xsec_token, xsec_source)，获取失败返回 ("", "")
+        """
+        import re
+
+        profile_url = f"{self.index_url}/user/profile/{user_id}"
+        try:
+            await self.context_page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
+            # 小红书为 SPA，等待首屏数据渲染完成
+            await asyncio.sleep(3)
+            html = await self.context_page.content()
+
+            # 优先匹配当前用户主页链接（形如 /user/profile/{id}?xsec_token=...）
+            m = re.search(
+                re.escape(f"/user/profile/{user_id}") + r"[^\"']*?xsec_token=([^&\"'\s]+)",
+                html,
+            )
+            if m:
+                return m.group(1), "pc_feed"
+
+            # 退而匹配页面内任意笔记链接的 xsec_token（同一次会话内 token 可复用）
+            m = re.search(r"/explore/[a-f0-9]{24}\?[^\"']*?xsec_token=([^&\"'\s]+)", html)
+            if m:
+                return m.group(1), "pc_search"
+
+            utils.logger.warning(
+                f"[XiaoHongShuCrawler._extract_token_from_profile_page] No xsec_token found in profile page for {user_id}"
+            )
+        except Exception as e:
+            utils.logger.error(
+                f"[XiaoHongShuCrawler._extract_token_from_profile_page] Failed to extract token for {user_id}: {e}"
+            )
+        return "", ""
+
+    async def _resolve_creator_by_search(self, keyword: str) -> CreatorUrlInfo:
+        """纯数字 user_id：站内搜索创作者，匹配用户主页链接并提取 token。
+
+        Raises:
+            ValueError: 搜索页未匹配到用户主页
+        """
+        import re
+
+        search_url = f"{self.index_url}/search_result?keyword={keyword}&source=web_explore_feed"
+        try:
+            await self.context_page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(3)
+            html = await self.context_page.content()
+            m = re.search(r'href="/user/profile/([a-f0-9]{24})\?[^"]*?xsec_token=([^&"]+)', html)
+            if m:
+                return CreatorUrlInfo(user_id=m.group(1), xsec_token=m.group(2), xsec_source="pc_search")
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuCrawler._resolve_creator_by_search] Search failed for {keyword}: {e}")
+
+        raise ValueError(
+            f"未能在搜索结果中找到创作者主页（keyword: {keyword}），"
+            f"请直接提供创作者主页完整链接（https://www.xiaohongshu.com/user/profile/...）"
+        )
 
     async def fetch_creator_notes_detail(self, note_list: List[Dict]):
         """Concurrently obtain the specified post list and save the data"""

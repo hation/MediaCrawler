@@ -27,10 +27,23 @@ import aiofiles
 import config
 from tools.utils import utils
 from tools.words import AsyncWordCloudGenerator
-from var import source_keyword_var
+from var import source_keyword_var, creator_id_var
 
 class AsyncFileWriter:
+    # 进程内按 (platform, crawler_type) 复用同一实例：
+    # 保证一次爬取会话内时间戳固定，避免跨分钟写入时拆分出多个文件
+    _instances: Dict = {}
+
+    def __new__(cls, platform: str, crawler_type: str):
+        key = (platform, crawler_type)
+        if key not in cls._instances:
+            cls._instances[key] = super().__new__(cls)
+        return cls._instances[key]
+
     def __init__(self, platform: str, crawler_type: str):
+        if getattr(self, "_initialized", False):
+            return
+        self._initialized = True
         self.lock = asyncio.Lock()
         self.platform = platform
         self.crawler_type = crawler_type
@@ -51,7 +64,12 @@ class AsyncFileWriter:
 
     def _get_file_path(self, file_type: str, item_type: str) -> str:
         base_path = self._get_dir_path(file_type)
-        parts = [self.crawler_type, item_type, self.start_time]
+        parts = [self.crawler_type, item_type]
+        # 仅创作者模式下插入 user_id，避免同一天多个创作者的数据写入同名文件
+        creator_id = creator_id_var.get().strip() if self.crawler_type == "creator" else ""
+        if creator_id:
+            parts.append(self._sanitize(creator_id))
+        parts.append(self.start_time)
         keyword = source_keyword_var.get().strip()
         if keyword:
             parts.append(self._sanitize(keyword))
