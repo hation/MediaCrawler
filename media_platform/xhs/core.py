@@ -469,13 +469,32 @@ class XiaoHongShuCrawler(AbstractCrawler):
             utils.logger.info(f"[XiaoHongShuCrawler.get_comments] Begin get note id comments {note_id}")
             # Use fixed crawling interval
             crawl_interval = random.uniform(config.CRAWLER_MIN_SLEEP_SEC, config.CRAWLER_MAX_SLEEP_SEC)
-            await self.xhs_client.get_note_all_comments(
-                note_id=note_id,
-                xsec_token=xsec_token,
-                crawl_interval=crawl_interval,
-                callback=xhs_store.batch_update_xhs_note_comments,
-                max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
-            )
+            try:
+                await self.xhs_client.get_note_all_comments(
+                    note_id=note_id,
+                    xsec_token=xsec_token,
+                    crawl_interval=crawl_interval,
+                    callback=xhs_store.batch_update_xhs_note_comments,
+                    max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+                )
+            except (IPBlockError, PlatformAccessError) as ex:
+                # 访问受限（IP 拦截 / 限流 / 账号安全），跳过该笔记评论，不中断整个任务
+                utils.logger.error(
+                    f"[XiaoHongShuCrawler.get_comments] Access restricted while getting comments for note {note_id}: {ex}. "
+                    f"建议降低采集频率、更换 IP 或检查账号状态"
+                )
+                return
+            except (RetryError, DataFetchError) as ex:
+                # 网络/数据获取失败（含登录态过期、验证码拦截），跳过该笔记评论
+                utils.logger.error(
+                    f"[XiaoHongShuCrawler.get_comments] Failed to get comments for note {note_id}: {ex}"
+                )
+                return
+            except Exception as ex:
+                utils.logger.error(
+                    f"[XiaoHongShuCrawler.get_comments] Unexpected error getting comments for note {note_id}: {ex}"
+                )
+                return
 
             # Sleep after fetching comments
             await asyncio.sleep(crawl_interval)

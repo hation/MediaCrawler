@@ -49,6 +49,14 @@ uv run main.py --platform <平台> --type creator --creator_id "<创作者ID或�
 - 其他平台（B站/抖音/微博等）`creator_id` 支持 ID 或主页 URL
 - 贴吧支持主页 URL 自动归一化
 
+> **小红书账号级别分析 · 固定配置（默认使用，用户另说才改）**：
+> - 存储：`--save_data_option csv`
+> - 一级评论：`--max_comments_count_singlenotes 50`，二级评论关闭 `--get_sub_comment false`
+> - 抓取上限：默认 200 条（`CRAWLER_MAX_NOTES_COUNT=200`）
+> - 请求间隔：5~10s 随机（config/base_config.py 已固化，加强防护）
+> - 登录：`--lt qrcode`，非无头 `--headless false`
+> - 输出：每次只生成 1 个 `creator_contents_{user_id}_{日期}_xhs.csv` + 1 个 `creator_comments_{user_id}_{日期}_xhs.csv`
+
 ### 场景3：内容的一级评论
 - 一级评论由场景1/2 模板默认带上（`--get_comment true`）
 - 用户单说要评论，视作在场景1/2 基础上开启评论，按对应场景执行
