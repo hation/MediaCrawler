@@ -122,6 +122,7 @@ class DouyinAwemeComment(Base):
     parent_comment_id = Column(String(255), comment='父评论ID')
     like_count = Column(Text, default='0', comment='点赞数')
     pictures = Column(Text, default='', comment='图片')
+    user_homepage = Column(Text, default='', comment='评论用户主页链接')
 
 class KuaishouVideo(Base):
     __tablename__ = 'kuaishou_video'

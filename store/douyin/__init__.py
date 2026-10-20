@@ -198,6 +198,7 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
     user_info = comment_item.get("user", {})
     comment_id = comment_item.get("cid")
     parent_comment_id = comment_item.get("reply_id", "0")
+    sec_uid = user_info.get("sec_uid", "")
     save_comment_item = {
         "comment_id": comment_id,
         "create_time": comment_item.get("create_time"),
@@ -205,6 +206,7 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
         "content": comment_item.get("text"),
         "creator_hash": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
         "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "user_homepage": f"https://www.douyin.com/user/{sec_uid}" if sec_uid else "",  # 用户主页链接(仅 sec_uid，可跳转主页)
         "sub_comment_count": str(comment_item.get("reply_comment_total", 0)),
         "like_count": (comment_item.get("digg_count") if comment_item.get("digg_count") else 0),
         "last_modify_ts": utils.get_current_timestamp(),
